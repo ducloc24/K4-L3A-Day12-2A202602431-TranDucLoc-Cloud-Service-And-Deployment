@@ -1,119 +1,79 @@
 # Phiếu Phản Ánh — K4 Level 3A, Ngày 12
 
-> **Bài làm cá nhân.** Trả lời bằng lời của chính bạn, dựa trên những gì bạn
-> quan sát được khi chạy code — không sao chép đáp án của người khác.
+> Bài làm cá nhân, dựa trên quá trình thực hiện lab.
 >
-> Cách trả lời: thay dòng `> *Câu trả lời của bạn*` bằng câu trả lời.
-> `grade.py` đếm số câu đã trả lời (15 điểm cho 10 câu).
->
-> Họ và tên: ..........................  Mã học viên: ..........................
+> Họ và tên: Trần Đức Lộc  Mã học viên: 2A202602431
 
 ---
 
 ### Câu 1 — Fail fast (CP1)
 
-Trong `Settings`, `agent_api_key` không có giá trị mặc định nên app chết ngay
-khi khởi động nếu thiếu biến môi trường. Hãy mô tả một tình huống cụ thể mà
-việc "chết sớm" này cứu bạn, so với việc để mặc định `"changeme"`.
-
-> *Câu trả lời của bạn*
+Nếu deploy lên cloud mà quên cấu hình `AGENT_API_KEY`, `Settings` báo thiếu trường bắt buộc ngay lúc khởi động nên deployment thất bại và mình phát hiện lỗi trong log trước khi service nhận request. Nếu đặt mặc định là `changeme`, app vẫn chạy; mình có thể tưởng đã bảo vệ API trong khi khóa yếu hoặc công khai đó vẫn được dùng để gọi `/ask`.
 
 ---
 
 ### Câu 2 — Log cho máy đọc (CP1)
 
-Chạy service và gọi `/ask` vài lần. Dán một dòng log JSON bạn thu được, rồi
-nêu **hai** việc bạn làm được với dòng log đó mà `print("đã trả lời xong")`
-không làm được.
+Ví dụ một dòng JSON từ structured logger:
 
-> *Câu trả lời của bạn*
+```json
+{"event": "ask_completed", "level": "info", "timestamp": "2026-09-28T10:49:55.254174+00:00", "user_id": "sv01", "tokens_in": 4, "tokens_out": 36, "cost_usd": 2.22e-05}
+```
+
+Từ log này, mình lọc và cộng chi phí theo `user_id` để biết user nào tiêu nhiều nhất; đồng thời lọc `level=error` hoặc đếm sự kiện theo thời gian để tính số lỗi/tỷ lệ lỗi. Một dòng `print("đã trả lời xong")` không có các trường cấu trúc đó để lọc và thống kê tự động.
 
 ---
 
 ### Câu 3 — Kích thước image (CP2)
 
-Build cả hai phiên bản và ghi lại số đo thật:
+Mình build lại Dockerfile one-stage ban đầu và Dockerfile multi-stage hiện tại trên cùng Docker Engine. Kết quả `docker image ls`:
 
-```bash
-docker build -f <Dockerfile-1-stage> -t agent:single .
-docker build -t agent:multi .
-docker images | grep agent
-```
+| Bản | Dung lượng đo được |
+|---|---:|
+| 1 stage | 1.73 GB |
+| Multi-stage | 271 MB |
 
-| Bản | Dung lượng |
-|-----|-----------|
-| 1 stage (bản đầu) | ... MB |
-| Multi-stage | ... MB |
-
-Giải thích: phần dung lượng chênh lệch đó là những gì?
-
-> *Câu trả lời của bạn*
+Bản multi-stage nhỏ hơn khoảng 1.46 GB. Bản one-stage dùng `python:3.11` đầy đủ và giữ mọi thứ trong cùng image; bản multi-stage dùng `python:3.11-slim`, rồi chỉ chuyển các dependency đã cài sang runtime. Vì thế runtime không mang theo phần dư của base image đầy đủ và các thành phần chỉ cần trong giai đoạn build.
 
 ---
 
 ### Câu 4 — Thứ tự lệnh trong Dockerfile (CP2)
 
-Sửa một ký tự trong `app/main.py` rồi build lại. Với Dockerfile của bạn, những
-layer nào được dùng lại từ cache, layer nào phải chạy lại? Nếu bạn đặt
-`COPY . .` lên trước `RUN pip install` thì kết quả khác thế nào?
-
-> *Câu trả lời của bạn*
+Dockerfile hiện copy `requirements.txt` và cài thư viện trước khi copy source. Khi chỉ sửa `app/main.py`, layer cài dependency vẫn được dùng lại từ cache; các layer copy source nằm sau điểm thay đổi phải chạy lại. Nếu đặt `COPY . .` trước `pip install`, mỗi thay đổi trong source làm layer copy đổi, khiến bước cài thư viện phía sau mất cache và chạy lại dù `requirements.txt` không đổi.
 
 ---
 
 ### Câu 5 — Vì sao không chạy bằng root (CP2)
 
-Container mặc định chạy bằng root. Mô tả chuỗi sự kiện dẫn từ "một lỗ hổng
-trong code Python của bạn" tới "kẻ tấn công có quyền cao trên máy host", và
-lệnh `USER` cắt đứt chuỗi đó ở chỗ nào.
-
-> *Câu trả lời của bạn*
+Nếu có lỗ hổng cho phép chạy lệnh trong app, kẻ tấn công có quyền của user đang chạy container. Chạy bằng root cho phép họ sửa nhiều file và truy cập rộng hơn vào tài nguyên được mount; nếu tiếp tục khai thác lỗ hổng container/runtime thì rủi ro ảnh hưởng host cũng tăng. `USER appuser` chuyển tiến trình sang user thường trước khi chạy app, giới hạn quyền trong container và giảm mức độ thiệt hại có thể gây ra.
 
 ---
 
 ### Câu 6 — Cửa sổ trượt (CP3)
 
-Rate limit của bạn dùng sliding window 60 giây. Nếu thay bằng cách đếm theo
-phút đồng hồ (reset lúc giây 00), một người dùng có thể gửi tối đa bao nhiêu
-request trong 2 giây liên tiếp khi hạn mức là 10/phút? Giải thích cách đạt được
-con số đó.
-
-> *Câu trả lời của bạn*
+Tối đa 20 request trong 2 giây: gửi 10 request ngay trước thời điểm phút đổi (ví dụ `10:00:59`), rồi thêm 10 request ngay sau khi bộ đếm theo phút reset (ví dụ `10:01:00`). Mỗi phút riêng lẻ vẫn có 10 request, nhưng trong một khoảng 2 giây người dùng đã gửi 20 request. Sliding window 60 giây tránh lỗ hổng này vì cả 20 request vẫn nằm trong cùng cửa sổ.
 
 ---
 
 ### Câu 7 — Rate limit và cost guard (CP3)
 
-Hai cơ chế này khác nhau ở điểm nào? Cho một tình huống mà rate limit cho qua
-nhưng cost guard phải chặn, và một tình huống ngược lại.
-
-> *Câu trả lời của bạn*
+Rate limit giới hạn số request trong một khoảng thời gian; cost guard giới hạn tổng chi phí trong tháng. Rate limit có thể cho request qua nhưng cost guard chặn nếu user còn ít ngân sách mà request dự kiến tốn nhiều tiền. Ngược lại, cost guard vẫn cho phép vì user còn ngân sách, nhưng rate limit chặn request thứ 11 trong cửa sổ 60 giây khi giới hạn là 10/phút.
 
 ---
 
-### Câu 8 — /health khác /ready (CP4)
+### Câu 8 — `/health` khác `/ready` (CP4)
 
-Nếu gộp hai endpoint làm một và cho nó kiểm tra Redis, chuyện gì xảy ra với cụm
-3 container khi Redis mất kết nối 30 giây? Trả lời theo đúng thứ tự sự kiện.
-
-> *Câu trả lời của bạn*
+Nếu `/health` cũng ping Redis, khi Redis mất kết nối thì cả ba container đều báo unhealthy. Orchestrator có thể lần lượt loại bỏ hoặc restart cả ba, dù process của agent vẫn chạy; trong lúc đó cụm không còn instance phục vụ, và restart liên tục làm sự cố nặng hơn. Tách probe giúp `/health` vẫn báo process còn sống, còn `/ready` trả 503 để load balancer tạm ngừng gửi traffic vào các instance không kết nối được Redis.
 
 ---
 
 ### Câu 9 — Stateless (CP4)
 
-Chạy `docker compose up --scale agent=3` rồi gọi `/ask` nhiều lần với cùng một
-`X-User-Id`. Quan sát `history_length` trong response. Nếu lịch sử được lưu
-trong một dict Python thay vì Redis, bạn sẽ thấy con số đó thay đổi thế nào?
-
-> *Câu trả lời của bạn*
+Với Redis dùng chung, mỗi request đọc lịch sử nhất quán bất kể được xử lý bởi instance nào; mỗi lần hỏi mới thì lịch sử trước request tăng thêm hai message (user và assistant). Nếu lưu trong dict của từng process, mỗi container có bản lịch sử riêng: request vào instance mới có thể thấy `history_length` bằng 0 hoặc thấp hơn, nên con số thay đổi tùy request được chuyển đến container nào.
 
 ---
 
 ### Câu 10 — Deploy thật (CP5)
 
-Ghi lại **một** lỗi bạn gặp khi deploy lên cloud (build fail, health check
-timeout, sai REDIS_URL, app không đọc `$PORT`...): thông báo lỗi là gì, bạn
-tìm ra nguyên nhân bằng cách nào, và sửa ra sao?
+Khi deploy Railway, log báo `Invalid value for '--port': '$PORT' is not a valid integer.` Mình xem Deploy Logs và thấy lệnh start truyền nguyên chuỗi `$PORT` cho Uvicorn thay vì giá trị port Railway cấp. Nguyên nhân là Start Command chạy trực tiếp nên biến không được shell mở rộng. Mình bỏ `startCommand` đó khỏi `railway.toml` và để Dockerfile chạy `sh -c` với `${PORT:-8000}`. Sau đó deploy service thành công; ở bản Render, mình kiểm tra `/health` và `/ready` đều trả HTTP 200, Redis báo `true`.
 
-> *Câu trả lời của bạn*
